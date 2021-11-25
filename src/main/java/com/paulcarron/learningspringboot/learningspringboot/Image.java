@@ -2,18 +2,23 @@ package com.paulcarron.learningspringboot.learningspringboot;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+//import javax.persistence.Id;
 
 @Data
-@NoArgsConstructor
+@Document
 public class Image {
 
-    private int id;
+    @Id
+    private final String id;
 
-    private String name;
+    private final String name;
 
-    public Image(int id, String name) {
-        this.id = id;
-        this.name = name;
-    }
+//    public Image(int id, String name) {
+//        this.id = id;
+//        this.name = name;
+//    }
 
 }

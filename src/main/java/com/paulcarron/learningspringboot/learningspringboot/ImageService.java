@@ -1,5 +1,6 @@
 package com.paulcarron.learningspringboot.learningspringboot;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.Resource;
@@ -16,6 +17,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.UUID;
 
 @Service
 public class ImageService {
@@ -24,8 +26,11 @@ public class ImageService {
 
     private final ResourceLoader resourceLoader;
 
-    public ImageService(ResourceLoader resourceLoader) {
+    private final ImageRepository imageRepository;
+
+    public ImageService(ResourceLoader resourceLoader, ImageRepository imageRepository) {
         this.resourceLoader = resourceLoader;
+        this.imageRepository = imageRepository;
     }
 
     /**
@@ -54,21 +59,25 @@ public class ImageService {
         };
     }
 
-    /**
-     * Find all images in UPLOAD_ROOT
-     * @return
-     */
+//    /**
+//     * Find all images in UPLOAD_ROOT
+//     * @return
+//     */
+//    public Flux<Image> findAllImages() {
+//        try {
+//            return Flux.fromIterable(
+//                    Files.newDirectoryStream(Paths.get(UPLOAD_ROOT)))
+//                    .map(path ->
+//                            new Image(path.hashCode(),
+//                                    path.getFileName().toString()));
+//        }
+//        catch (IOException e) {
+//            return Flux.empty();
+//        }
+//    }
+
     public Flux<Image> findAllImages() {
-        try {
-            return Flux.fromIterable(
-                    Files.newDirectoryStream(Paths.get(UPLOAD_ROOT)))
-                    .map(path ->
-                            new Image(path.hashCode(),
-                                    path.getFileName().toString()));
-        }
-        catch (IOException e) {
-            return Flux.empty();
-        }
+        return imageRepository.findAll();
     }
 
     /**
@@ -82,25 +91,77 @@ public class ImageService {
                         "file:" + UPLOAD_ROOT + "/" + fileName));
     }
 
-    /**
-     * Create a new image
-     * @param files
-     * @return
-     */
+//    /**
+//     * Create a new image
+//     * @param files
+//     * @return
+//     */
+//    public Mono<Void> createImage(Flux<FilePart> files) {
+//        return files.flatMap(file -> file.transferTo(
+//                Paths.get(UPLOAD_ROOT, file.filename()).toFile())).then();
+//    }
+
     public Mono<Void> createImage(Flux<FilePart> files) {
-        return files.flatMap(file -> file.transferTo(
-                Paths.get(UPLOAD_ROOT, file.filename()).toFile())).then();
+        return files
+                .flatMap(file -> {
+                    Mono<Image> saveDatabaseImage = imageRepository.save(
+                            new Image(
+                                    UUID.randomUUID().toString(),
+                                    file.filename()
+                            )
+                    );
+
+                    Mono<Void> copyFile = Mono.just(
+                            Paths.get(UPLOAD_ROOT, file.filename())
+                                    .toFile())
+                                    .log("createImage-picktarget")
+                                    .map(destFile -> {
+                                        try {
+                                            destFile.createNewFile();
+                                            return destFile;
+                                        }
+                                        catch (IOException e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    })
+                                    .log("createImage-newFile")
+                                    .flatMap(file::transferTo)
+                                    .log("createImage-copy");
+                            return Mono.when(saveDatabaseImage, copyFile);
+                })
+                .then();
+
     }
 
+//    public Mono<Void> deleteImage(String fileName) {
+//        return Mono.fromRunnable(() -> {
+//            try {
+//                Files.deleteIfExists(Paths.get(UPLOAD_ROOT, fileName));
+//            }
+//            catch (IOException e) {
+//                throw new RuntimeException(e);
+//            }
+//        });
+//    }
+
     public Mono<Void> deleteImage(String fileName) {
-        return Mono.fromRunnable(() -> {
+        Mono<Void> deleteDatabaseImage = imageRepository
+                .findByName(fileName)
+                .flatMap(imageRepository::delete);
+
+        Mono<Void> deleteFile = Mono.fromRunnable(() -> {
             try {
-                Files.deleteIfExists(Paths.get(UPLOAD_ROOT, fileName));
+                Files.deleteIfExists(
+                        Paths.get(UPLOAD_ROOT, fileName)
+                );
             }
             catch (IOException e) {
                 throw new RuntimeException(e);
             }
         });
+
+        return Mono.when(deleteDatabaseImage, deleteFile)
+                .then();
     }
 
 }

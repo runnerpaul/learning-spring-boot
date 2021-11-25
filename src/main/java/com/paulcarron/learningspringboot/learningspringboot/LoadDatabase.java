@@ -9,7 +9,7 @@ import reactor.core.publisher.Flux;
 public class LoadDatabase {
 
     @Bean
-    CommandLineRunner init (ChapterRepository repository) {
+    CommandLineRunner initOld (ChapterRepository repository) {
         return args -> {
             Flux.just(
                     new Chapter("Quick Start With Java"),
